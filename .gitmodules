@@ -1,0 +1,3 @@
+[submodule "piping-ui-web"]
+	path = piping-ui-web
+	url = https://github.com/kikoqiu/piping-ui-web.git
