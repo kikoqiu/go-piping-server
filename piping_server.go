@@ -101,7 +101,7 @@ func getTransferHeaderAndBody(req *http.Request) (textproto.MIMEHeader, io.ReadC
 }
 
 func (s *PipingServer) Handler(resWriter http.ResponseWriter, req *http.Request) {
-	s.logger.Printf("%s %s %s", req.Method, req.URL, req.Proto)
+	s.logger.Printf("%s %s %s %s", req.Method, req.RemoteAddr, req.URL, req.Proto)
 	path := req.URL.Path
 
 	if req.Method == "GET" || req.Method == "HEAD" {
