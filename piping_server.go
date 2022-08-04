@@ -1,37 +1,21 @@
 package piping_server
 
 import (
+	"embed"
+	_ "embed"
 	"fmt"
-	"github.com/nwtgck/go-piping-server/version"
 	"io"
+	"io/fs"
 	"log"
 	"mime"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
-	"strconv"
+	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 )
-
-const (
-	reservedPathIndex      = "/"
-	reservedPathNoScript   = "/noscript"
-	reservedPathVersion    = "/version"
-	reservedPathHelp       = "/help"
-	reservedPathFaviconIco = "/favicon.ico"
-	reservedPathRobotsTxt  = "/robots.txt"
-)
-
-var reservedPaths = [...]string{
-	reservedPathIndex,
-	reservedPathVersion,
-	reservedPathHelp,
-	reservedPathFaviconIco,
-	reservedPathRobotsTxt,
-}
-
-const noscriptPathQueryParameterName = "path"
 
 type pipe struct {
 	receiverResWriterCh chan http.ResponseWriter
@@ -41,25 +25,40 @@ type pipe struct {
 }
 
 type PipingServer struct {
-	pathToPipe map[string]*pipe
-	mutex      *sync.Mutex
-	logger     *log.Logger
+	pathToPipe    map[string]*pipe
+	mutex         *sync.Mutex
+	logger        *log.Logger
+	statichandler http.Handler
 }
 
-func isReservedPath(path string) bool {
-	for _, p := range reservedPaths {
-		if p == path {
-			return true
-		}
+func isPipingPath(path string) bool {
+	return strings.HasPrefix(path, "/p/")
+}
+
+//our static web server content.
+//go:embed "piping-ui-web/dist"
+var static embed.FS
+
+//-go:embed "piping-ui-web/dist.zip"
+//var zippedStatic []byte
+
+func getStatic(staticPath string) http.Handler {
+	if staticPath == "" {
+		s := fs.FS(static)
+		s, _ = fs.Sub(s, "piping-ui-web/dist")
+		return http.FileServer(http.FS(s))
+		//zr, _ := zip.NewReader(bytes.NewReader(zippedStatic), int64(len(zippedStatic)))
+		//return http.FileServer(http.FS(fs.FS(zr)))
 	}
-	return false
+	return http.FileServer(http.FS(os.DirFS(staticPath)))
 }
 
-func NewServer(logger *log.Logger) *PipingServer {
+func NewServer(staticPath string, logger *log.Logger) *PipingServer {
 	return &PipingServer{
-		pathToPipe: map[string]*pipe{},
-		mutex:      new(sync.Mutex),
-		logger:     logger,
+		pathToPipe:    map[string]*pipe{},
+		mutex:         new(sync.Mutex),
+		logger:        logger,
+		statichandler: getStatic(staticPath),
 	}
 }
 
@@ -106,51 +105,11 @@ func (s *PipingServer) Handler(resWriter http.ResponseWriter, req *http.Request)
 	path := req.URL.Path
 
 	if req.Method == "GET" || req.Method == "HEAD" {
-		switch path {
-		case reservedPathIndex:
-			indexPageBytes := []byte(indexPage)
-			resWriter.Header().Set("Content-Type", "text/html")
-			resWriter.Header().Set("Content-Length", strconv.Itoa(len(indexPageBytes)))
-			resWriter.Header().Set("Access-Control-Allow-Origin", "*")
-			resWriter.Write(indexPageBytes)
-			return
-		case reservedPathNoScript:
-			noScriptHtmlBytes := []byte(noScriptHtml(req.URL.Query().Get(noscriptPathQueryParameterName)))
-			resWriter.Header().Set("Content-Type", "text/html")
-			resWriter.Header().Set("Content-Length", strconv.Itoa(len(noScriptHtmlBytes)))
-			resWriter.Header().Set("Access-Control-Allow-Origin", "*")
-			resWriter.Write(noScriptHtmlBytes)
-			return
-		case reservedPathVersion:
-			versionBytes := []byte(fmt.Sprintf("%s in Go\n", version.Version))
-			resWriter.Header().Set("Content-Type", "text/plain")
-			resWriter.Header().Set("Content-Length", strconv.Itoa(len(versionBytes)))
-			resWriter.Header().Set("Access-Control-Allow-Origin", "*")
-			resWriter.Write(versionBytes)
-			return
-		case reservedPathHelp:
-			protocol := "http"
-			if req.TLS != nil {
-				protocol = "https"
-			}
-			url := fmt.Sprintf(protocol+"://%s", req.Host)
-			helpPageBytes := []byte(helpPage(url))
-			resWriter.Header().Set("Content-Type", "text/plain")
-			resWriter.Header().Set("Content-Length", strconv.Itoa(len(helpPageBytes)))
-			resWriter.Header().Set("Access-Control-Allow-Origin", "*")
-			resWriter.Write(helpPageBytes)
-			return
-		case reservedPathFaviconIco:
-			resWriter.Header().Set("Content-Length", "0")
-			resWriter.WriteHeader(204)
-			return
-		case reservedPathRobotsTxt:
-			resWriter.Header().Set("Content-Length", "0")
-			resWriter.WriteHeader(404)
+		if !isPipingPath(path) {
+			s.statichandler.ServeHTTP(resWriter, req)
 			return
 		}
 	}
-
 	// TODO: should close if either sender or receiver closes
 	switch req.Method {
 	case "GET":
@@ -167,15 +126,19 @@ func (s *PipingServer) Handler(resWriter http.ResponseWriter, req *http.Request)
 		if len(pi.receiverResWriterCh) != 0 || atomic.LoadUint32(&pi.isTransferring) == 1 {
 			resWriter.Header().Set("Access-Control-Allow-Origin", "*")
 			resWriter.WriteHeader(400)
-			resWriter.Write([]byte("[ERROR] The number of receivers has reached limits.\n"))
+			resWriter.Write([]byte("[ERROR] The number of receivers has reached limits.\n" + path))
 			return
 		}
+
 		pi.receiverResWriterCh <- resWriter
 		// Wait for finish
-		<-pi.sendFinishedCh
+		select {
+		case <-pi.sendFinishedCh:
+		case <-req.Context().Done():
+		}
 	case "POST", "PUT":
 		// If reserved path
-		if isReservedPath(path) {
+		if !isPipingPath(path) {
 			resWriter.Header().Set("Access-Control-Allow-Origin", "*")
 			resWriter.WriteHeader(400)
 			resWriter.Write([]byte(fmt.Sprintf("[ERROR] Cannot send to the reserved path '%s'. (e.g. '/mypath123')\n", path)))

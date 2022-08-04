@@ -3,16 +3,17 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"github.com/lucas-clemente/quic-go/http3"
-	"github.com/nwtgck/go-piping-server"
-	"github.com/nwtgck/go-piping-server/version"
-	"github.com/spf13/cobra"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 	"log"
 	"net/http"
 	"os"
 	"runtime"
+
+	"github.com/lucas-clemente/quic-go/http3"
+	piping_server "github.com/nwtgck/go-piping-server"
+	"github.com/nwtgck/go-piping-server/version"
+	"github.com/spf13/cobra"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 )
 
 var showsVersion bool
@@ -22,6 +23,7 @@ var httpsPort uint16
 var keyPath string
 var crtPath string
 var enableHttp3 bool
+var staticPath string
 
 func init() {
 	cobra.OnInitialize()
@@ -31,6 +33,7 @@ func init() {
 	RootCmd.PersistentFlags().Uint16VarP(&httpsPort, "https-port", "", 8443, "HTTPS port")
 	RootCmd.PersistentFlags().StringVarP(&keyPath, "key-path", "", "", "Private key path")
 	RootCmd.PersistentFlags().StringVarP(&crtPath, "crt-path", "", "", "Certification path")
+	RootCmd.PersistentFlags().StringVarP(&staticPath, "static", "", "", "Static resources path")
 	RootCmd.PersistentFlags().BoolVarP(&enableHttp3, "enable-http3", "", false, "Enable HTTP/3 (experimental)")
 }
 
@@ -46,7 +49,7 @@ var RootCmd = &cobra.Command{
 		}
 		logger := log.New(os.Stderr, "", log.LstdFlags|log.Lmicroseconds)
 		logger.Printf("Piping Server %s (%s)", version.Version, runtime.Version())
-		pipingServer := piping_server.NewServer(logger)
+		pipingServer := piping_server.NewServer(staticPath, logger)
 		errCh := make(chan error)
 		if enableHttps || enableHttp3 {
 			if keyPath == "" {
