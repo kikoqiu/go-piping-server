@@ -1,32 +1,10 @@
 # go-piping-server
-[Piping Server](https://github.com/nwtgck/piping-server) written in Go language (original: <https://github.com/nwtgck/piping-server>)
-
-## Install for Ubuntu
-```bash
-wget https://github.com/nwtgck/go-piping-server/releases/download/v0.4.0/go-piping-server-0.4.0-linux-amd64.deb
-sudo dpkg -i go-piping-server-0.4.0-linux-amd64.deb 
-```
-
-## Install for macOS
-```bash
-brew install nwtgck/go-piping-server/go-piping-server
-```
-
-## Install for Windows
-[Download](https://github.com/nwtgck/go-piping-server/releases/download/v0.4.0/go-piping-server-0.4.0-windows-amd64.zip)
-
-Get more executables in the [releases](https://github.com/nwtgck/go-piping-server/releases).
-
-## Docker
-
-```bash
-docker run -p 8181:8080 nwtgck/go-piping-server
-```
+Demo server https://p.155575.xyz:8447/
 
 ## Server options
 
 ```
-Infinitely transfer between any device over pure HTTP
+File transfer directly between devices over HTTP.
 
 Usage:
   go-piping-server [flags]
@@ -40,4 +18,5 @@ Flags:
       --https-port uint16   HTTPS port (default 8443)
       --key-path string     Private key path
       --version             show version
+      --static              set static resources path(replace the default piping-ui-web)
 ```
