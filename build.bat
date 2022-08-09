@@ -15,5 +15,11 @@ go build -ldflags "-s -w" -o build/%APPNAME%_%GOOS%_%GOARCH% main/main.go
 
 SET GOOS=linux
 SET GOARCH=mips
+SET GOMIPS=softfloat
+go build -ldflags "-s -w" -o build/%APPNAME%_%GOOS%_%GOARCH% main/main.go 
+
+SET GOOS=linux
+SET GOARCH=mipsle
+SET GOMIPS=softfloat
 go build -ldflags "-s -w" -o build/%APPNAME%_%GOOS%_%GOARCH% main/main.go 
 
